@@ -4,6 +4,6 @@ The PDF summarizer allows the user to input search queries on the pdf files insi
 
 For this project, I used the Chroma Database to store the compiled data from the PDF files which makes it easier for the Ollama AI model to query and give a brief summary of the documents to the user.
 
-Models required: "nomic-embed-text" and "llama3
+Models required: "nomic-embed-text" and "mistral"
 
 ![Demo](./demo.png)
