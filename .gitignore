@@ -3,3 +3,4 @@ venv
 chroma
 .DS_Store
 data/*
+llama.cpp

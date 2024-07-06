@@ -69,18 +69,17 @@ async def main():
                 ]
 
                 error = False
-                route_to, error = route()
-                if error: continue
                 results: List[Tuple[Document, float]] = []
-                while route_to == "document_search":
-                    agent_query, error = transform_input_to_query()
-                    if error: break
-                    search_result, error = document_search(agent_query)
-                    if error: break
-                    results += search_result
-                    route_to, error = route()
-                if error: continue
-                await generate_response(model, results)
+                instructions = route()
+                for instruction in instructions:
+                    if instruction["choice"] == "document_search":
+                        agent_query, error = transform_input_to_query(instruction["suggestion"])
+                        if error: break
+                        search_result, error = document_search(agent_query)
+                        if error: break
+                        results += search_result
+                    if instruction["choice"] == "generate":
+                        await generate_response(model, instruction["suggestion"], results)
         except KeyboardInterrupt:
             print()
             continue
@@ -92,20 +91,20 @@ async def main():
 def route():
     """Routes the conversation"""
     global HISTORY
-    progress = Halo(text=f"Routing conversation...", spinner='dots')
+    progress = Halo(text=f"Just a moment...", spinner='dots')
     try:
         progress.start()
 
         model_json = Ollama(model=MODEL_NAME, format='json', temperature=0)
         history_for_agents = generate_history(HISTORY)
         route_chain = ROUTING_PROMPT | model_json | JsonOutputParser()
-
-        route_to : str = route_chain.invoke({ "history": history_for_agents })["choice"]
-        progress.succeed(f"Routed to {route_to}")
-        return route_to.lower(), False
+        data = route_chain.invoke({ "history": history_for_agents })
+        instructions : list[dict[str, str]] = data["instructions"]
+        progress.succeed()
+        return instructions
     except Exception as e:
-        progress.fail(f"An error occurred. {repr(e)}")
-        return "error", True
+        progress.fail(f"An error occurred with Routing Agent: '{repr(e)}'.")
+        return [{ "generate": "Tell the user that you cannot find the answer to the user's input/question." }]
         
 
 def document_search(query: str):
@@ -132,7 +131,7 @@ def document_search(query: str):
         progress.fail(f"An error occurred. {repr(e)}")
         return [], True
 
-def transform_input_to_query():
+def transform_input_to_query(suggestion: str):
     """Transforms the user question to web search"""
     global HISTORY
     try:
@@ -140,13 +139,13 @@ def transform_input_to_query():
         history_for_agents = generate_history(HISTORY)
         query_chain = QUERY_PROMPT | model_json | JsonOutputParser()
 
-        gen_query = query_chain.invoke({ "history": history_for_agents })
+        gen_query = query_chain.invoke({ "history": history_for_agents, "suggestion": suggestion })
         search_query: str = gen_query["query"]
         return search_query, False
     except Exception as e:
         return "", True
 
-async def generate_response(model: Ollama, results: list[Tuple[Document, float]] = list()):
+async def generate_response(model: Ollama, suggestion: str, results: list[Tuple[Document, float]] = list()):
     global HISTORY
     print()
     chain = RESPONSE_PROMPT | model | StrOutputParser()
@@ -155,7 +154,7 @@ async def generate_response(model: Ollama, results: list[Tuple[Document, float]]
     sources = [f"{_score:.2f}\t" + doc.metadata.get("id", None) for doc, _score in results]
 
     text = ""
-    for chunk in chain.stream({ "history": history }):
+    for chunk in chain.stream({ "history": history, "suggestion": suggestion }):
         print(chunk, end="", flush=True)
         text += chunk
     print("\n")

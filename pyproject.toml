@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "pdfsummarizer "
+version = "0.1.0"
+description = "A python PDF Retrieval Augmented Generation project that uses nomic-embed-text and mistral models to help users summarise their pdfs in a conversation."
+authors = ["Minh Tri Bui <tribui141108@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10"
+langchain-community = "0.2.4"
+halo = "0.0.31"
+pypdf = "4.2.0"
+chromadb = "0.5.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
