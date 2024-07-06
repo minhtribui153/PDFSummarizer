@@ -1,3 +1,9 @@
-# PDF Chat
+# PDF Summarizer
 
-Chat with your own PDF files with your own local AI model
+The PDF summarizer allows the user to input search queries on the pdf files inside the `data` folder, and the AI model will search for the relevant results and give a summary to the user
+
+For this project, I used the Chroma Database to store the compiled data from the PDF files which makes it easier for the Ollama AI model to query and give a brief summary of the documents to the user.
+
+Models required: "nomic-embed-text" and "llama3
+
+![Demo](./demo.png)

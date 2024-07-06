@@ -1,14 +1,14 @@
-from typing import Tuple
+from typing import Tuple, List
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_community.llms.ollama import Ollama
 from langchain_community.llms.openai import OpenAI
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_core.documents import Document
 
-from populate_database import split_documents, load_documents, clear_database, add_to_chroma
+from utils import split_documents, load_documents, clear_database, add_to_chroma
 
 from halo import Halo
-from templates import QUERY_PROMPT, RESPONSE_PROMPT, generate_history, generate_history_agent_helpers
+from templates import ROUTING_PROMPT, QUERY_PROMPT, RESPONSE_PROMPT, generate_history
 
 import asyncio
 import argparse
@@ -27,6 +27,8 @@ HISTORY: list[dict[str, str]] = []
 
 
 async def main():
+    """The main progam"""
+    global HISTORY
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true", help="Reset the database.")
     args = parser.parse_args()
@@ -59,12 +61,26 @@ async def main():
                 print("Invalid query")
                 continue
             else:
-                transformed_query = transform_input_to_query(query)
-                if transformed_query["is_error"]: continue
-                current_query: str = transformed_query["search_query"]
+                HISTORY += [
+                    {
+                        "entity": "user",
+                        "message": query
+                    }
+                ]
 
-                search_result = document_search(current_query)
-                await generate_response(transformed_query["search_query"], model, search_result["results"])
+                error = False
+                route_to, error = route()
+                if error: continue
+                results: List[Tuple[Document, float]] = []
+                while route_to == "document_search":
+                    agent_query, error = transform_input_to_query()
+                    if error: break
+                    search_result, error = document_search(agent_query)
+                    if error: break
+                    results += search_result
+                    route_to, error = route()
+                if error: continue
+                await generate_response(model, results)
         except KeyboardInterrupt:
             print()
             continue
@@ -73,78 +89,80 @@ async def main():
             print(f"Error: {repr(e)}")
             continue
 
+def route():
+    """Routes the conversation"""
+    global HISTORY
+    progress = Halo(text=f"Routing conversation...", spinner='dots')
+    try:
+        progress.start()
+
+        model_json = Ollama(model=MODEL_NAME, format='json', temperature=0)
+        history_for_agents = generate_history(HISTORY)
+        route_chain = ROUTING_PROMPT | model_json | JsonOutputParser()
+
+        route_to : str = route_chain.invoke({ "history": history_for_agents })["choice"]
+        progress.succeed(f"Routed to {route_to}")
+        return route_to.lower(), False
+    except Exception as e:
+        progress.fail(f"An error occurred. {repr(e)}")
+        return "error", True
+        
+
 def document_search(query: str):
+    """Search for information on Chroma Database"""
+    global HISTORY
     progress = Halo(text=f"Searching on Chroma database for '{query}' ...", spinner='dots')
     try:
         progress.start()
 
         db = Chroma(persist_directory=CHROMA_PATH, embedding_function=get_embedding_function())
-        results = db.similarity_search_with_score(query, k=5)
-        progress.succeed()
-        print(results)
-        return { "query": query, "results": results, "error": False }
+        results = db.similarity_search_with_score(query, k=4)
+
+        result_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results]) if len(results) > 0 else "No contexts found"
+        HISTORY += [
+            {
+                "entity": "query",
+                "input": query,
+                "result": result_text
+            }
+        ]
+        progress.succeed(f"Searched on Chroma database for '{query}'. Found {len(results)} results.")
+        return results, False
     except Exception as e:
         progress.fail(f"An error occurred. {repr(e)}")
-        return { "query": query, "results": [], "error": True }
+        return [], True
 
-def transform_input_to_query(user_input: str):
-    """
-    Transform user question to web search
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): Appended search query
-    """
-    progress = Halo(text='Getting your input ready for search...', spinner='dots')
+def transform_input_to_query():
+    """Transforms the user question to web search"""
+    global HISTORY
     try:
-        progress.start()
         model_json = Ollama(model=MODEL_NAME, format='json', temperature=0)
-        history_for_agents = generate_history_agent_helpers(HISTORY)
+        history_for_agents = generate_history(HISTORY)
         query_chain = QUERY_PROMPT | model_json | JsonOutputParser()
 
-        gen_query = query_chain.invoke({"history": history_for_agents, "input": user_input})
-        search_query = gen_query["query"]
-        progress.succeed()
-        return {"search_query": search_query, "is_error": False}
+        gen_query = query_chain.invoke({ "history": history_for_agents })
+        search_query: str = gen_query["query"]
+        return search_query, False
     except Exception as e:
-        progress.fail(f"An error occurred. {repr(e)}")
-        return { "search_query": None, "is_error": True }
+        return "", True
 
-async def generate_response(query: str, model: Ollama, results: list[Tuple[Document, float]] = list()):
+async def generate_response(model: Ollama, results: list[Tuple[Document, float]] = list()):
     global HISTORY
     print()
     chain = RESPONSE_PROMPT | model | StrOutputParser()
     history = generate_history(HISTORY)
 
-    context_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results]) if len(results) > 0 else "No contexts found"
     sources = [f"{_score:.2f}\t" + doc.metadata.get("id", None) for doc, _score in results]
 
-    data_to_pass = { "history": history, "context": context_text, "message": query }
-
     text = ""
-    for chunk in chain.stream(data_to_pass):
+    for chunk in chain.stream({ "history": history }):
         print(chunk, end="", flush=True)
         text += chunk
     print("\n")
     if len(sources) > 0:
         print("-------------------------------")
-        print(f"Score\tSources:\n{"\n".join(sources)}")
+        print(f"Score\tSources:\n{'\n'.join(sources)}")
         print("-------------------------------")
-
-
-    HISTORY += [
-        {
-            "entity": "user",
-            "message": query,
-            "context": context_text
-        },
-        {
-            "entity": "assistant",
-            "message": text,
-        }
-    ]
     return text
 
 
