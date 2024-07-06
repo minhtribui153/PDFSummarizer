@@ -22,7 +22,7 @@ def get_embedding_function():
     return embeddings
 
 CHROMA_PATH = "chroma"
-MODEL_NAME = "llama3"
+MODEL_NAME = "mistral"
 HISTORY: list[dict[str, str]] = []
 
 
@@ -116,7 +116,7 @@ def document_search(query: str):
         progress.start()
 
         db = Chroma(persist_directory=CHROMA_PATH, embedding_function=get_embedding_function())
-        results = db.similarity_search_with_score(query, k=4)
+        results = db.similarity_search_with_score(query, k=5)
 
         result_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results]) if len(results) > 0 else "No contexts found"
         HISTORY += [
