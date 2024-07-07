@@ -9,4 +9,4 @@ Models required: "nomic-embed-text" and "mistral"
 Resources used:
 http://www.macs.hw.ac.uk/~yjc32/project/ref-NN/Gurney_et_al.pdf
 
-![Demo](./demo.png)
+![Demo](./demo.gif)
