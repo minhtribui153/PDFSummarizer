@@ -18,7 +18,7 @@ You are an AI assistant in the response generation stage. Your task is to provid
 9. If appropriate, offer suggestions for follow-up questions or additional information the user might find helpful.
 10. If there is a suggestion provided for you to answer the user's latest question, take note as well.
 
-Remember to maintain consistency with any previous information provided in the conversation.
+Remember to maintain consistency with any previous information provided in the conversation, and make sure you answered the user's question.
 Suggestion: {suggestion}
 
 
@@ -51,18 +51,30 @@ Guidelines for choosing between document search and generation:
    - Recent search results provide sufficient, relevant information to fully answer the user's question.
    - The query is a follow-up or clarification directly related to previously searched topics.
    - You're confident that generating a response based on existing information will be accurate and complete.
-   - There have been 2 or more consecutive searches without generating a response.
 
 Important considerations:
 - You have no built-in knowledge. Your knowledge must come from document searches.
 - Prioritize accuracy over avoiding searches. When in doubt, perform a document search.
 - For multi-part questions, consider if all parts can be answered with existing information.
 - Maintain context across conversation turns, but verify information when the topic shifts significantly.
+- The document search uses similarity search, so use multiple document searches for longer queries.
 - Use logical reasoning to combine information from multiple searches when appropriate.
 - If a generated response might be incomplete, opt for an additional search to ensure comprehensiveness.
 
 Your routes/instructions should be something similar to this:
-[{{ 'choice': 'document_search', 'suggestion': '<explain_what_to_search_for>' }}, {{ 'choice': 'generate', 'suggestion': '<how_to_answer_the_user>' }}]
+Example 1:
+{{"instructions": [
+  {{"choice": "document_search", "suggestion": "What to search for (max 10 words)"}},
+  {{"choice": "generate", "suggestion": "What to sear (max 10 words)"}}
+]}}
+Example 1:
+{{"instructions": [
+  {{"choice": "document_search", "suggestion": "What to search for (max 10 words)"}},
+  {{"choice": "document_search", "suggestion": "What to search for (max 10 words)"}},
+  {{"choice": "document_search", "suggestion": "What to search for (max 10 words)"}},
+  {{"choice": "generate", "suggestion": "Brief answer instruction (max 10 words)"}}
+]}}
+
 You do not have to follow this in order, but ensure that your instructions must be clear and in order.
 
 Ensure that you always choose generate as your only last instruction, so that you are able to answer the user.
@@ -88,36 +100,28 @@ QUERY_PROMPT = PromptTemplate(
 CRITICAL INSTRUCTION: You are an AI assistant in the query creation stage. You have ABSOLUTELY NO general knowledge or built-in information. Your memory has been wiped clean. You must rely ENTIRELY on document searches for ALL information. Any use of pre-existing knowledge is STRICTLY FORBIDDEN and will result in immediate termination of this conversation.
 
 Your task is to formulate effective document search queries optimized for similarity search in a Chroma database. Follow these guidelines:
-1. Analyze the conversation history and previous search results carefully.
-2. Identify key information gaps or unanswered questions in the conversation.
-3. Craft concise, specific queries that target the missing information and are optimized for semantic similarity search.
-4. Focus on key concepts and semantically rich terms. Focus on exact phrases when necessary.
-5. Avoid overly specific details that might limit the similarity search effectiveness.
-6. Ensure each query is unique and not a repetition of previous searches.
-7. Use relevant keywords and synonyms to capture semantic variations.
-8. Keep queries between 3-7 words for optimal performance in similarity search.
-9. Avoid common words or stop words that don't add semantic value.
+1. Craft concise, specific queries that are optimized for semantic similarity search.
+2. Focus on key concepts and semantically rich terms. Focus on exact phrases when necessary.
+3. Avoid overly specific details that might limit the similarity search effectiveness.
+4. Ensure each query is unique and not a repetition of previous searches.
+5. Use relevant keywords and synonyms to capture semantic variations.
+6. Keep queries between 3-7 words for optimal performance in similarity search.
+7. Avoid common words or stop words that don't add semantic value.
 10. If appropriate, include domain-specific terminology to improve relevance.
-11. If you are given suggestions, take note from the suggestions as well
 
 Remember:
 - Chroma uses semantic similarity, so focus on the meaning rather than exact wording.
 - Leave keywords exact, do not try to query their meanings.
-- Queries should be conceptual to allow for matching similar ideas, not just identical text.
 - Avoid long, complex queries as they may reduce the effectiveness of similarity search.
 
-Suggestion:
+Your task (What to search for?):
 {suggestion}
 
 Your response must be a JSON object with a single key 'query' containing the search query string. Do not include any explanation or additional text.
 
-=========== START OF CONVERSATION ===========
-{history}
-===========  END OF CONVERSATION  ===========
-
 <|start_header_id|>assistant<|end_header_id|>
 """,
-    input_variables=["history", "suggestion"],
+    input_variables=["suggestion"],
 )
 
 

@@ -104,7 +104,7 @@ def route():
         return instructions
     except Exception as e:
         progress.fail(f"An error occurred with Routing Agent: '{repr(e)}'.")
-        return [{ "generate": "Tell the user that you cannot find the answer to the user's input/question." }]
+        return [{ "choice": "generate", "suggestion": "Tell the user that you cannot find the answer to the user's input/question." }]
         
 
 def document_search(query: str):
@@ -115,7 +115,7 @@ def document_search(query: str):
         progress.start()
 
         db = Chroma(persist_directory=CHROMA_PATH, embedding_function=get_embedding_function())
-        results = db.similarity_search_with_score(query, k=5)
+        results = db.similarity_search_with_score(query, k=3)
 
         result_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results]) if len(results) > 0 else "No contexts found"
         HISTORY += [
@@ -136,10 +136,9 @@ def transform_input_to_query(suggestion: str):
     global HISTORY
     try:
         model_json = Ollama(model=MODEL_NAME, format='json', temperature=0)
-        history_for_agents = generate_history(HISTORY)
         query_chain = QUERY_PROMPT | model_json | JsonOutputParser()
 
-        gen_query = query_chain.invoke({ "history": history_for_agents, "suggestion": suggestion })
+        gen_query = query_chain.invoke({ "suggestion": suggestion })
         search_query: str = gen_query["query"]
         return search_query, False
     except Exception as e:
